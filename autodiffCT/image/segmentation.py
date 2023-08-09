@@ -9,7 +9,7 @@ from autodiffCT.parameter import TorchParameter
 class ThresholdOperator(DifferentiableOperator):
     def __init__(self, thresholds=None, init_method='otsu', n_classes=2,
                  bins=128, device='cpu', re_init_at_call=True,
-                 gamma=1e4, split_classes=False):
+                 gamma=1e4, split_classes=False, normalize=False):
         super().__init__(device=device)
         self.supported_methods = ["otsu"]
         self.init_method = init_method
@@ -21,6 +21,7 @@ class ThresholdOperator(DifferentiableOperator):
         self.n_classes = n_classes
         self.bins = bins
         self.gamma = gamma
+        self.normalize = normalize
 
         self.parameters = {}
         if thresholds is not None:
@@ -34,6 +35,13 @@ class ThresholdOperator(DifferentiableOperator):
     def implements_batching(self):
         return False
 
+    def normalize_volume(self, volume):
+        t = volume.min()
+        volume = volume - t
+        s = volume.max()
+        volume = (1/s) * volume
+        return volume
+
     def initialize_threshold(self, volume):
         if self.init_method == 'otsu':
             thresholds = threshold_multiotsu(volume.cpu().detach().numpy(),
@@ -42,6 +50,8 @@ class ThresholdOperator(DifferentiableOperator):
         self.parameters['thresholds'] = TorchParameter(thresholds, device=self.device)
 
     def __call__(self, volume):
+        if self.normalize:
+            volume = self.normalize_volume(volume)
         if self.re_init_at_call:
             self.initialize_threshold(volume)
         if not self.split_classes:
